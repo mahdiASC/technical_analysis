@@ -24,11 +24,11 @@ rawData['Part.1']<-apply(rawData['Part.1'],1,function(x){
   return(fixer(x)) 
 })
 
-#endData['Name']<-apply(endData['Name'],1,tolower)
+#Selecting names
+selectionName<-rawData[rawData[["Part.1"]] %in% endData[['Name']],]
 
-selectionName<-filter(rawData, Part.1 %in% endData[['Name']])
-selectionEmail<-filter(filter(rawData, Personal.Email %in% endData[['Student.Email']]), Part.1 %nin% endData[['Name']])
-#need to add names to email only finds (unusual characters & mispellings)
+selectionEmail.all<-rawData[rawData[["Personal.Email"]] %in% endData[['Student.Email']],]
+selectionEmail<-selectionEmail.all[selectionEmail.all[["Part.1"]] %nin% endData[['Name']],]
 
 selectionEmail[['Part.1']]<-apply(selectionEmail,1,function(x){
   index<-which(endData[['Student.Email']]==x['Personal.Email'])
@@ -43,12 +43,13 @@ dup_names<-names(which(table(total_selection['Part.1'])!=1))
 dup_indx<-which(total_selection[['Part.1']]==dup_names)
 
 #viewing
-total_selection[dup_indx,]
+#total_selection[dup_indx,]
 
 total_selection<-total_selection[-c(142,143),]
 
 #removing unneeded columns and changing column names
 total_selection<-total_selection[,c(2,24,28,29,38,40)]
+#total_selection<-total_selection[,c(2,24,28,29,34,38,40)] #cohorts
 
 #cleaning technical data
 preData<-preData[,-c(1,2,16)]
@@ -161,8 +162,26 @@ finalData['techScore.diff']<-apply(finalData,1,function(x){
   as.numeric(x['techScore.post'])-as.numeric(x['techScore.pre'])
 })
 
+##Data for Lexie##
+
+#data.lex<-subset(finalData,select=c(Name,Final.Score, Logic.Score, techScore.pre, techScore.post, techScore.diff))
+#names<-c("Jesus Castano","Seth Roberts","Hasaan Ismaeli","Donald  Poindexter ","Jerome McCree","Isaiah Massey","Marcus Stevens","Ahmed Anthony","Marcus Jones","Isaiah Kearney","Jordan  Jiles","Eric Humphries","Brady Walker","Jeremiah Alford","Jayden  Walker","Ke'Von Brown","Darius  Watts","mouhamed  barry")
+#names<-sapply(names,fixer)
+#data.lex.all<-data.lex[data.lex[["Name"]] %in% names,] #no rows?
+#summary(data.lex.all)
+
+##End of data for lexie##
+
 #Building out statistics options for quantitative and qualitative data
 pcrData<-subset(finalData,select=c(Final.Score, Logic.Score,Grade, School.Type, Previous.CS.Experience, techScore.pre, techScore.post, techScore.diff))
+#pcrData<-subset(finalData,select=c(Name, Final.Score, Logic.Score,Grade, School.Type, Cohort, Previous.CS.Experience, techScore.pre, techScore.post, techScore.diff))
+
+#write.csv(pcrData,'cohorts.csv', row.names=FALSE)
+
+###SENDING TO HEZEL
+#hzl.data<-subset(finalData,select=c(Name,Final.Score, Logic.Score,Grade, School.Type, Previous.CS.Experience, techScore.pre, techScore.post, techScore.diff))
+#colnames(hzl.data)<-c("name",'read_score','logic_score','grade','school_type','cs_exp','tech_score.pre','tech_score.post','tech_score.change')
+#write.csv(hzl.data,'tech_data.csv', row.names=FALSE)
 
 #correcting Data types
 pcrData <- transform(pcrData, Grade = as.factor(Grade),School.Type = as.factor(School.Type),Previous.CS.Experience = as.factor(Previous.CS.Experience))
@@ -227,22 +246,53 @@ rpart.plot(rpart.model.diff)
 
 #Conclusion: Post focus is not something we can build model for!
 
-#https://www.youtube.com/watch?v=GOJN9SKl_OE
-
-#rpart.prediction <- predict(rpart.model, testData)
-#x<-data.frame(pcrData.num$techScore.diff,rpart.prediction)
-#x$error<-apply(x,1,function(x){
-#  round(sqrt(abs(x[2]-x[1])/x[2]),digit=3)
-#})
-  
 #Selecting variables for model (QUALITATIVE)
 #rpart.model <- rpart(techScore.diff ~ Grade+School.Type+Previous.CS.Experience, data = pcrData, method = "anova")
 
 #Create various predictive models
-#library(caret)
-#train_control <- trainControl(method="LOOCV")
-# train the model
-#model <- train(techScore.diff ~ Logic.Score + Final.Score, data=trainData, trControl=train_control, method="nb")
 #test accuracy of models
+rpart.prediction <- predict(rpart.model.diff, testData, type = 'class')
 
-#Final model!
+#misclassifcation error
+mean(rpart.prediction!=testData$techScore.diff.cat)
+
+###NEW PREDICTION MODELS
+#outcome is continous
+#with dichotomous explanatory variables
+
+#Using linear Regression for continous variables
+#Using ANOVA for categorical variables
+
+#separating the variables
+
+lm.train<-trainData[,-c(3:5,9:11)]
+lm.test<-testData[,-c(3:5,9:11)]
+anova.train<-trainData[,-c(1,2, 6:8)]
+anova.test<-testData[,-c(1,2, 6:8)]
+
+#linear regression
+library(caret)
+
+#https://www.r-bloggers.com/r-tutorial-series-multiple-linear-regression/
+
+#diff is NOT a good way to predict
+lm.diff <- lm(techScore.diff~Final.Score+Logic.Score, data=lm.train)
+summary(lm.diff)
+
+#post is way more effective at predicting!
+lm.post <- lm(techScore.post~Logic.Score+techScore.pre, data=lm.train)
+summary(lm.post)
+
+#cross validation
+
+library(DAAG)
+
+#1 continuous variable at a time
+#Nothing signficant about techScore.diff
+cv.lm(lm.train, techScore.post~techScore.pre) #p<.056
+cv.lm(pcrData.num, techScore.post~Logic.Score) # .014
+
+
+#Assessing Categorical data
+# General Linear Model
+glm()
